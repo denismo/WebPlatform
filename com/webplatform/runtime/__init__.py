@@ -1,8 +1,10 @@
 from com.webplatform.modules import ModuleState
 from com.webplatform.runner.boostrap import ioc
+from llvm import *
+from llvm.core import *
+from llvm.ee import *
 
 __author__ = 'Denis Mikhalkin'
-
 
 class ModuleCache(object):
     def getCachedModuleFromURL(self, moduleURL):
@@ -25,12 +27,28 @@ class RuntimeException(Exception):
 
 
 class AspectManager(object):
-    pass
+    def executeModuleAspects(self, module):
+        pass
+
+    def getMainMethodAspect(self):
+        return None
+
+    def extractModuleAspects(self, module):
+        pass
 
 
 class ExecutionService(object):
-    pass
+    def __init__(self):
+        self.llvm = ExecutionEngine.new()
 
+    def runMethod(self, method, **args):
+        self.llvm.run_function(method, args)
+
+    def registerMethodModule(self, method):
+        pass
+
+    def registerCodeModule(self, code):
+        pass
 
 class Runtime(object):
 
@@ -101,6 +119,8 @@ class Runtime(object):
 
     def locateMainMethod(self, module):
         mainMethodAspect = ioc.get(AspectManager).getMainMethodAspect()
+        if mainMethodAspect is None:
+            return None
         for cls in module.allClasses():
             for method in cls.allStaticMethods():
                 if mainMethodAspect.appliesTo(method):
