@@ -39,16 +39,21 @@ class AspectManager(object):
 
 class ExecutionService(object):
     def __init__(self):
-        self.llvm = ExecutionEngine.new()
+        emptyModule = Module.new('Dummy')
+        self.llvm = ExecutionEngine.new(emptyModule)
 
     def runMethod(self, method, **args):
         self.llvm.run_function(method, args)
 
     def registerMethodModule(self, method):
-        pass
+        # methodModule = Module.new(method.ownerClass.ownerModule.strongName() + ":" + method.ownerClass.name + ":" + method.name)
+        # TODO How about module name?
+        methodModule = Module.from_assembly(method.code)
+        self.llvm.add_module(methodModule)
 
     def registerCodeModule(self, code):
-        pass
+        codeModule = Module.from_assembly(code)
+        self.llvm.add_module(codeModule)
 
 class Runtime(object):
 

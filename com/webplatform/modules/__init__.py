@@ -19,7 +19,8 @@ class ModuleClass(object):
 
 
 class ModuleMethod(object):
-    def __init__(self, methodRes):
+    def __init__(self, ownerClass, methodRes):
+        self.ownerClass = ownerClass
         self.name = methodRes.name
         self.code = methodRes.code
 
