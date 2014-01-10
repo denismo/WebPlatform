@@ -1,5 +1,5 @@
-from com.webplatform.runner.boostrap import ioc
-from com.webplatform.runtime import ExecutionService
+from injector import inject, Injector
+from com.webplatform.runtime import IExecutionService
 
 __author__ = 'Denis Mikhalkin'
 
@@ -19,17 +19,22 @@ class ModuleClass(object):
 
 
 class ModuleMethod(object):
-    def __init__(self, ownerClass, methodRes):
+    @inject(ioc=Injector)
+    def __init__(self, ownerClass, methodRes, ioc):
         self.ownerClass = ownerClass
         self.name = methodRes.name
         self.code = methodRes.code
+        self.ioc = ioc
 
     def prepare(self):
-        ioc.get(ExecutionService).registerMethodModule(self, self.code)
+        pass
+        self.ioc.get(IExecutionService).registerMethodModule(self, self.code)
 
 
 class Module(object):
-    def __init__(self):
+    @inject(ioc=Injector)
+    def __init__(self, ioc):
+        self.ioc = ioc
         self.version = "1.0"
         self.name = "com.webplatform.module1"
         self.signature = "signature"
@@ -41,7 +46,7 @@ class Module(object):
         self.classes = list()
 
     @classmethod
-    def newFromBinary(cls, moduleBinary):
+    def newFromBinary(cls, moduleBinary, ioc):
         module = ioc.get(Module)
         module.decode(moduleBinary)
         return module
@@ -50,7 +55,7 @@ class Module(object):
         pass
 
     def prepareForRuntime(self):
-        execService = ioc.get(ExecutionService)
+        execService = self.ioc.get(IExecutionService)
 
         def prepareCode(code):
             execService.registerCodeModule(self, code)
@@ -60,11 +65,12 @@ class Module(object):
             self.classes.append(clsObj)
             clsObj.prepare()
 
-        for res in self.resources:
-            if Module.isCode(res):
-                prepareCode(res)
-            elif Module.isClass(res):
-                prepareClass(res)
+        if self.resources is not None:
+            for res in self.resources:
+                if Module.isCode(res):
+                    prepareCode(res)
+                elif Module.isClass(res):
+                    prepareClass(res)
 
     @classmethod
     def isCode(cls, res):
