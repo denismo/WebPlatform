@@ -1,6 +1,7 @@
 import injector
 from webplatform.runtime import IRuntime, IModuleCache, IModuleIO
 from webplatform.modules import Module
+from webplatform.runtime.impl import RuntimeException
 
 __author__ = 'Denis Mikhalkin'
 
@@ -24,8 +25,10 @@ class Bootstrapper(object):
 
         moduleCache = self.ioc.get(IModuleCache)
         moduleBinary = moduleCache.getCachedModuleFromURL(moduleURL)
-        if moduleBinary is not None:
+        if moduleBinary is None:
             moduleBinary = self.ioc.get(IModuleIO).fetchModule(moduleURL)     # throws
+            if moduleBinary is None:
+                raise RuntimeException("Unable to load binary for " + moduleURL)
             moduleCache.cacheModuleWithURL(moduleURL, moduleBinary)
 
         return Module.newFromBinary(moduleBinary, self.ioc)

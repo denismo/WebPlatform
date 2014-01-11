@@ -1,23 +1,31 @@
 import injector
+from mock import Mock, patch
 from webplatform.runner import Bootstrapper
-from webplatform.runtime import IModuleIO, IRuntime, IModuleCache
-from webplatform.runtime.impl import Runtime, ModuleCache
+from webplatform.runtime import IModuleIO, IRuntime, IModuleCache, IExecutionService
+from webplatform.runtime.impl import Runtime, ModuleCache, ModuleIO, ExecutionService
 
-__author__ = 'adminuser'
+__author__ = 'Denis Mikhalkin'
 
 import unittest
 
 class TestExecute(unittest.TestCase):
 
-    def testExecute(self):
+    @patch("com.webplatform.runtime.impl.ModuleIO")
+    def testMock(self, MockModuleIOClass):
+        mockIO = MockModuleIOClass.return_value
+        mockIO.fetchModule.return_value = "blah"
+        res = mockIO.fetchModule("")
+        assert res == "blah"
+
+    @patch("com.webplatform.runtime.impl.ModuleIO")
+    def testExecute(self, mockModuleIOWrapper):
+        mockIO = mockModuleIOWrapper.return_value
         def configure(binder):
             binder.bind(IRuntime, Runtime)
             binder.bind(IModuleCache, ModuleCache)
-            binder.bind(IModuleIO, MockModuleIO)
+            binder.bind(IModuleIO, injector.InstanceProvider(mockIO))
+            binder.bind(IExecutionService, ExecutionService)
         ioc = injector.Injector(configure)
-        boot = Bootstrapper("", ioc)
 
-
-class MockModuleIO:
-    def fetchModule(self, moduleURL):
-        return None
+        mockIO.fetchModule.return_value = None
+        Bootstrapper("", ioc)
