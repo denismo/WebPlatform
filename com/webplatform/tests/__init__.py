@@ -11,13 +11,6 @@ import unittest
 class TestExecute(unittest.TestCase):
 
     @patch("com.webplatform.runtime.impl.ModuleIO")
-    def testMock(self, MockModuleIOClass):
-        mockIO = MockModuleIOClass.return_value
-        mockIO.fetchModule.return_value = "blah"
-        res = mockIO.fetchModule("")
-        assert res == "blah"
-
-    @patch("com.webplatform.runtime.impl.ModuleIO")
     def testExecute(self, mockModuleIOWrapper):
         mockIO = mockModuleIOWrapper.return_value
         def configure(binder):
