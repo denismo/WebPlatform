@@ -1,7 +1,6 @@
 import injector
-from webplatform.runtime import IRuntime, IModuleCache, IModuleIO
+from webplatform.runtime import IRuntime, IModuleCache, IModuleIO, RuntimeException
 from webplatform.modules import Module
-from webplatform.runtime.impl import RuntimeException
 
 __author__ = 'Denis Mikhalkin'
 

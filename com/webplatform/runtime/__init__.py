@@ -10,3 +10,11 @@ class IModuleCache(object):
 
 class IModuleIO(object):
     pass
+
+# TODO Potential hook into language runtime? In order to provide native types (e.g. native tuple or list) as opposed to class-implemented types
+class ITypeLookup(object):
+    pass
+
+
+class RuntimeException(BaseException):
+    pass

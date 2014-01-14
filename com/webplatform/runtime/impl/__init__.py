@@ -1,8 +1,10 @@
 from injector import Injector, inject
-from com.webplatform.modules import ModuleState
 from llvm.core import *
 from llvm.ee import *
-from webplatform.runtime import IExecutionService, IRuntime, IModuleIO, IModuleCache
+
+from com.webplatform.modules import ModuleState
+from webplatform.runtime import IExecutionService, IRuntime, IModuleIO, IModuleCache, RuntimeException
+
 
 __author__ = 'Denis Mikhalkin'
 
@@ -20,10 +22,6 @@ class ModuleIO(IModuleIO):
     def fetchModule(self, moduleURL):
         # TODO Implement mock fetching
         raise RuntimeException("Not implemented")
-
-
-class RuntimeException(BaseException):
-    pass
 
 
 class AspectManager(object):

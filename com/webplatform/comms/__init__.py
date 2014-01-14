@@ -1,4 +1,5 @@
 from injector import Injector, inject
+from webplatform.runtime import ITypeLookup, RuntimeException
 
 __author__ = 'Denis Mikhalkin'
 
@@ -46,17 +47,36 @@ class ModuleResource(Resource):
 
             # TODO Implement verification
             self.verifyModule()
+        else:
+            raise RuntimeException("Unsupported module binary type " + type(moduleBinary))
+
+class TypedValue(object):
+    @inject(ioc=Injector)
+    def __init__(self, typeSpec, ioc):
+        typeLookup = ioc.get(ITypeLookup)
+        self.type = typeLookup.lookup(typeSpec)
+
+
+class NamedTypedValue(TypedValue):
+    @inject(ioc=Injector)
+    def __init__(self, name, typeSpec, ioc):
+        super(NamedTypedValue, self).__init__(typeSpec, ioc)
+        self.name = name
+
+
+class MethodParameter(NamedTypedValue):
+    @inject(ioc=Injector)
+    def __init__(self, parameterSpec, ioc):
+        super(NamedTypedValue, self).__init__(parameterSpec["name"], parameterSpec["type"], ioc)
+        self.kind = parameterSpec["kind"]   # ParameterKind - in, out, ref
 
 
 class MethodResource(object):
     # name, code
     def __init__(self, methodBinary):
-        self.decode(methodBinary)
-
-    def decode(self, methodBinary):
         self.name = methodBinary["name"]
-        self.parameters = MethodResource.decodeParameters(methodBinary["parameters"])
-        self.returnType = MethodResource.decodeType(methodBinary["returnType"])
+        self.parameters = methodBinary["parameters"].map(lambda param: MethodParameter(param))
+        self.returnType = TypedValue(methodBinary["returnType"])
         self.content = methodBinary["code"]
 
 
@@ -75,14 +95,9 @@ class ClassResource(Resource):
     def __init__(self, classBinary):
         super(ClassResource, self).__init__()
         self.methods = list()
-        self.name = ""
         self.type = ClassResource.type
-        self.decode(classBinary)
-
-    def decode(self, classBinary):
         self.name = classBinary["name"]
-        for meth in classBinary["methods"]:
-            self.methods.append(MethodResource(meth))
+        self.methods = classBinary["methods"].map(lambda method: MethodResource(method))
 
 
 class Visibility(object):
@@ -94,3 +109,9 @@ class Visibility(object):
 
 class IResourceFactory(object):
     pass
+
+
+class ParameterKind(object):
+    pIn = 1,
+    pOut = 2,
+    pRef = 4,
