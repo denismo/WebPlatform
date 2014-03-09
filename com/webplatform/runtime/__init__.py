@@ -15,6 +15,11 @@ class IModuleIO(object):
 class ITypeLookup(object):
     pass
 
+class IAspect(object):
+    def appliesTo(self, obj):
+        pass
+
 
 class RuntimeException(BaseException):
     pass
+

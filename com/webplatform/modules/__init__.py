@@ -18,6 +18,8 @@ class ModuleClass(object):
         for meth in self.methods:
             meth.prepare()
 
+    def staticMethods(self):
+        return filter(lambda meth: meth.static, self.methods)
 
 class ModuleMethod(object):
     @inject(ioc=Injector)
@@ -26,9 +28,9 @@ class ModuleMethod(object):
         self.name = methodRes.name
         self.code = methodRes.code
         self.ioc = ioc
+        self.static = methodRes.static
 
     def prepare(self):
-        pass
         self.ioc.get(IExecutionService).registerMethodModule(self, self.code)
 
 
@@ -49,13 +51,14 @@ class Module(object):
     @classmethod
     def newFromBinary(cls, moduleBinary, ioc):
         module = ioc.get(Module)
-        module.init(ModuleResource(moduleBinary))
+        module.init(ModuleResource(moduleBinary, ioc))
         return module
 
 
     def init(self, moduleResource):
         self.name = moduleResource.name
         self.version = moduleResource.version
+        self.origin = moduleResource.origin
         if moduleResource.dependencies is not None:
             for dep in moduleResource.dependencies:
                 self.dependencies.append(ModuleDependency(dep))

@@ -36,19 +36,26 @@ class ModuleResource(Resource):
             self.origin = moduleBinary["origin"]
 
             self.dependencies = list()
-            for dep in moduleBinary["dependencies"]:
-                self.dependencies.append(ModuleDependencyResource(dep))
+            if "dependencies" in moduleBinary:
+                for dep in moduleBinary["dependencies"]:
+                    self.dependencies.append(ModuleDependencyResource(dep))
 
             self.resources = list()
 
             resFactory = self.ioc.get(IResourceFactory)
-            for res in moduleBinary["resources"]:
-                self.resources.append(resFactory.decode(res))
+            if "resources" in moduleBinary:
+                for res in moduleBinary["resources"]:
+                    self.resources.append(resFactory.decode(res))
 
             # TODO Implement verification
             self.verifyModule()
         else:
             raise RuntimeException("Unsupported module binary type " + type(moduleBinary))
+
+    def verifyModule(self):
+        # TODO Implement module verification
+        pass
+
 
 class TypedValue(object):
     @inject(ioc=Injector)
@@ -78,6 +85,7 @@ class MethodResource(object):
         self.parameters = methodBinary["parameters"].map(lambda param: MethodParameter(param))
         self.returnType = TypedValue(methodBinary["returnType"])
         self.content = methodBinary["code"]
+        self.static = methodBinary["static"]
 
 
 class CodeResource(Resource):

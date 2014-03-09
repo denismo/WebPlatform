@@ -4,6 +4,7 @@ from llvm.ee import *
 
 from com.webplatform.modules import ModuleState
 from webplatform.runtime import IExecutionService, IRuntime, IModuleIO, IModuleCache, RuntimeException
+from webplatform.runtime.impl.aspects import MainMethodAspect
 
 
 __author__ = 'Denis Mikhalkin'
@@ -23,13 +24,15 @@ class ModuleIO(IModuleIO):
         # TODO Implement mock fetching
         raise RuntimeException("Not implemented")
 
-
 class AspectManager(object):
+    def __init__(self):
+        self.mainMethodAspect = MainMethodAspect()
+
     def executeModuleAspects(self, module):
         pass
 
     def getMainMethodAspect(self):
-        return None
+        return self.mainMethodAspect
 
     def extractModuleAspects(self, module):
         pass
@@ -41,7 +44,9 @@ class ExecutionService(IExecutionService):
         self.llvm = ExecutionEngine.new(emptyModule)
 
     def runMethod(self, method, **args):
-        self.llvm.run_function(method, args)
+        retval = self.llvm.run_function(method, args)
+        if retval is not None:
+            print "Returned: %s" % str(retval.as_int())
 
     def registerMethodModule(self, method):
         # methodModule = Module.new(method.ownerClass.ownerModule.strongName() + ":" + method.ownerClass.name + ":" + method.name)
@@ -128,11 +133,11 @@ class Runtime(IRuntime):
         mainMethodAspect = self.ioc.get(AspectManager).getMainMethodAspect()
         if mainMethodAspect is None:
             return None
-        for cls in module.allClasses():
-            for method in cls.allStaticMethods():
+        for cls in module.classes:
+            for method in cls.staticMethods():
                 if mainMethodAspect.appliesTo(method):
                     return method
         return None
 
     def runMethod(self, method):
-        self.ioc.get(ExecutionService).runMethod(method)
+        self.ioc.get(IExecutionService).runMethod(method)
