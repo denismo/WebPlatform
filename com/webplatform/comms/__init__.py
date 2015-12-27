@@ -1,5 +1,6 @@
 from injector import Injector, inject
 from webplatform.runtime import ITypeLookup, RuntimeException
+import dontasq
 
 __author__ = 'Denis Mikhalkin'
 
@@ -31,7 +32,9 @@ class ModuleResource(Resource):
             self.name = moduleBinary["name"]
             self.version = moduleBinary["version"]
             self.certificate = moduleBinary["certificate"]
+            self.certificateHash = moduleBinary["certificateHash"]
             self.signature = moduleBinary["signature"]
+            self.publisher = moduleBinary["publisher"]
             # TODO Set origin as the URL from which the binary was downloaded?
             self.origin = moduleBinary["origin"]
 
@@ -82,9 +85,12 @@ class MethodResource(object):
     # name, code
     def __init__(self, methodBinary):
         self.name = methodBinary["name"]
-        self.parameters = methodBinary["parameters"].map(lambda param: MethodParameter(param))
-        self.returnType = TypedValue(methodBinary["returnType"])
-        self.content = methodBinary["code"]
+        if "parameters" in methodBinary:
+            self.parameters = methodBinary["parameters"].map(lambda param: MethodParameter(param))
+        if "returnType" in methodBinary:
+            self.returnType = TypedValue(methodBinary["returnType"])
+        if "code" in methodBinary:
+            self.content = methodBinary["code"]
         self.static = methodBinary["static"]
 
 
@@ -102,24 +108,33 @@ class ClassResource(Resource):
 
     def __init__(self, classBinary):
         super(ClassResource, self).__init__()
-        self.methods = list()
         self.type = ClassResource.type
         self.name = classBinary["name"]
-        self.methods = classBinary["methods"].map(lambda method: MethodResource(method))
+        self.methods = map(lambda method: MethodResource(method), classBinary["methods"])
 
 
 class Visibility(object):
-    private = 1
-    internal = 2    # Internally visible resources are visible only within the same module
+    private = 1     # Private resources are visible only within the same module
+    internal = 2    # Internally visible resources are visible only within the same publisher
     public = 3
     default = internal
 
 
 class IResourceFactory(object):
-    pass
+    pass # TODO Implement resource factory
+
+
+class ResourceFactory(IResourceFactory):
+    resourceMap = {ClassResource.type: ClassResource, CodeResource.type: CodeResource}
+    def decode(self, binaryResource):
+        resource_type = binaryResource["type"]
+        if resource_type in ResourceFactory.resourceMap:
+            return ResourceFactory.resourceMap[resource_type](binaryResource)
+        return None
 
 
 class ParameterKind(object):
-    pIn = 1,
-    pOut = 2,
-    pRef = 4,
+    pIn = 1
+    pOut = 2
+    pRef = 4
+

@@ -1,52 +1,69 @@
 from injector import inject, Injector
-from com.webplatform.runtime import IExecutionService
+from distlib.version import NormalizedVersion, NormalizedMatcher
+from webplatform.runtime import IExecutionService, IRuntime
 from webplatform.comms import CodeResource, ClassResource, ModuleResource
+import dontasq
 
 __author__ = 'Denis Mikhalkin'
 
+class ModuleIdentifier(object):
+    def __init__(self, module):
+        self.publisher = module["publisher"]
+        self.name = module["name"]
+        self.version = module["version"]
+        self.certificateHash = module["certificateHash"]
 
 class ModuleClass(object):
-    def __init__(self, classRes):
+    @inject(ioc=Injector)
+    def __init__(self, ioc):
+        self.ioc = ioc
+
+    def init(self, ownerModule, classRes):
         self.name = classRes.name
+        self.ownerModule = ownerModule
 
         self.methods = dict()
         for methRes in classRes.methods:
-            meth = ModuleMethod(methRes)
+            meth = self.ioc.get(ModuleMethod)
+            meth.init(self, methRes)
             self.methods[meth.name] = meth
 
     def prepare(self):
-        for meth in self.methods:
+        for meth in self.methods.values():
             meth.prepare()
 
     def staticMethods(self):
-        return filter(lambda meth: meth.static, self.methods)
+        return self.methods.values().where(lambda meth: meth.static).to_list()
 
 class ModuleMethod(object):
     @inject(ioc=Injector)
-    def __init__(self, ownerClass, methodRes, ioc):
+    def __init__(self, ioc):
+        self.ioc = ioc
+
+    def init(self, ownerClass, methodRes):
         self.ownerClass = ownerClass
         self.name = methodRes.name
-        self.code = methodRes.code
-        self.ioc = ioc
+        self.code = methodRes.content if hasattr(methodRes, 'content') else None
         self.static = methodRes.static
 
     def prepare(self):
-        self.ioc.get(IExecutionService).registerMethodModule(self, self.code)
+        execService = self.ioc.get(IExecutionService)
+        execService.registerMethodModule(self)
 
 
 class Module(object):
     @inject(ioc=Injector)
     def __init__(self, ioc):
         self.ioc = ioc
-        self.version = "1.0"
-        self.name = "com.webplatform.module1"
+        self.version = "1.0" # These are really just dummy values. Initialisation happens in the init() method
+        self.name = "com.webplatform.module1" # These are really just dummy values. Initialisation happens in the init() method
         # self.signature = "signature"
         # self.certificate = "certificate"
         # self.origin = "http://www.webminivm.com/modules?module={name}&version={version}"
-        self.dependencies = list()     # list of ModuleDependency
-        self.resources = list()        # list of Resource
+        self.dependencies = list()      # list of ModuleDependency
+        self.resources = list()         # list of Resource
         self.state = ModuleState.loaded
-        self.classes = list()
+        self.classes = list()           # list of ModuleClass
 
     @classmethod
     def newFromBinary(cls, moduleBinary, ioc):
@@ -54,11 +71,12 @@ class Module(object):
         module.init(ModuleResource(moduleBinary, ioc))
         return module
 
-
     def init(self, moduleResource):
         self.name = moduleResource.name
         self.version = moduleResource.version
         self.origin = moduleResource.origin
+        self.publisher = moduleResource.publisher
+        self.certificateHash = moduleResource.certificateHash
         if moduleResource.dependencies is not None:
             for dep in moduleResource.dependencies:
                 self.dependencies.append(ModuleDependency(dep))
@@ -66,6 +84,8 @@ class Module(object):
             for res in moduleResource.resources:
                 self.resources.append(res)
 
+    def getIdentifier(self):
+        return ModuleIdentifier(self)
 
     def prepareForRuntime(self):
         execService = self.ioc.get(IExecutionService)
@@ -74,7 +94,8 @@ class Module(object):
             execService.registerCodeModule(self, code)
 
         def prepareClass(cls):
-            clsObj = ModuleClass(cls)
+            clsObj = self.ioc.get(ModuleClass)
+            clsObj.init(self, cls)
             self.classes.append(clsObj)
             clsObj.prepare()
 
@@ -93,20 +114,35 @@ class Module(object):
     def isClass(cls, res):
         return res.type == ClassResource.type
 
+    def __getitem__(self, item):
+        return getattr(self, item)
+
 
 class ModuleRequirement(object):
-    def __init__(self, name, requiredVersion, certificateHash):
+    def __init__(self, name, version, publisher, certificateHash):
         self.name = name
-        self.requiredVersion = requiredVersion
+        self.version = VersionRequirement(name, version)
         self.certificateHash = certificateHash
+        self.publisher = publisher
 
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+    def matches(self, moduleOrKey):
+        if type(moduleOrKey) == Module:
+            moduleOrKey = moduleOrKey.getIdentifier()
+        if type(moduleOrKey) == ModuleIdentifier:
+            return self.name == moduleOrKey.name and self.version.matches(moduleOrKey.version) and \
+                   self.certificateHash == moduleOrKey.certificateHash and self.publisher == moduleOrKey.publisher
+        else:
+            raise RuntimeError("Unexpected value for matching module requirement: " + moduleOrKey)
 
 class ModuleDependency(object):
     def __init__(self, dep):
-        for prop in ["name", "originURL", "requiredVersion", "certificateHash", "downloadTime"]:
+        for prop in ["name", "originURL", "requiredVersion", "certificateHash", "downloadTime", "publisher"]:
             setattr(self, prop, getattr(dep, prop))
 
-        self.requiredVersion = VersionRequirement(self.requiredVersion)
+        self.requiredVersion = VersionRequirement(self.name, self.requiredVersion)
 
         # self.requiredVersion = None  # instance of VersionRequirement
         # self.name = ""
@@ -116,16 +152,19 @@ class ModuleDependency(object):
         self.module = None           # instance of Module
 
     def moduleRequirement(self):
-        return ModuleRequirement(self.name, self.requiredVersion, self.certificateHash)
+        return ModuleRequirement(self.name, self.requiredVersion, self.publisher, self.certificateHash)
 
 
 class VersionRequirement(object):
-    def __init__(self, reqStr):
-        self.upperBound = ("", True)     # True/False for inclusive/exclusive
-        self.lowerBound = ("", True)
-        # TODO Decode reqStr
+    def __init__(self, name, reqStr):
+        # See http://pythonhosted.org/distlib/tutorial.html#using-the-version-api
+        self.requirement = NormalizedMatcher('%s (%s)' % (name, reqStr))
 
-
+    def matches(self, module):
+        if type(module) == str:
+            return self.requirement.match(NormalizedVersion(module))
+        elif type(module) == Module:
+            return self.requirement.match(NormalizedVersion(module.version))
 
 ################ ENUMS #################
 

@@ -1,4 +1,5 @@
 
+
 class IExecutionService(object):
     pass
 
@@ -6,7 +7,10 @@ class IRuntime(object):
     pass
 
 class IModuleCache(object):
-    pass
+    def cacheModule(self, module):
+        pass
+    def getCachedModule(self, moduleRequirement):
+        pass
 
 class IModuleIO(object):
     pass

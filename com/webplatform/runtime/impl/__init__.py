@@ -1,22 +1,32 @@
 from injector import Injector, inject
-from llvm.core import *
-from llvm.ee import *
+# from llvm.core import *
+# from llvm.ee import *
 
-from com.webplatform.modules import ModuleState
+from webplatform.modules import ModuleState, ModuleIdentifier, Module
 from webplatform.runtime import IExecutionService, IRuntime, IModuleIO, IModuleCache, RuntimeException
 from webplatform.runtime.impl.aspects import MainMethodAspect
 
-
 __author__ = 'Denis Mikhalkin'
 
+
 class ModuleCache(IModuleCache):
-    def getCachedModuleFromURL(self, moduleURL):
-        # TODO Implement retrieval from cache
+
+    def __init__(self):
+        self.cache = dict()
+
+    def getCachedModule(self, moduleRequirement):
+        for key in self.cache:
+            if moduleRequirement.matches(key):
+                return self.cache[key]
+
         return None
 
-    def cacheModuleWithURL(self, moduleURL, module):
-        # TODO Implement caching of module
-        pass
+    def cacheModule(self, module):
+        if type(module) == Module:
+            key = module.getIdentifier()
+        else:
+            key = ModuleIdentifier(module)
+        self.cache[key] = module
 
 
 class ModuleIO(IModuleIO):
@@ -38,37 +48,57 @@ class AspectManager(object):
         pass
 
 
-class ExecutionService(IExecutionService):
+# class LLVMExecutionService(IExecutionService):
+#     def __init__(self):
+#         emptyModule = Module.new('Dummy')
+#         self.llvm = ExecutionEngine.new(emptyModule)
+#
+#     def runMethod(self, method, **args):
+#         retval = self.llvm.run_function(method, args)
+#         if retval is not None:
+#             print "Returned: %s" % str(retval.as_int())
+#
+#     def registerMethodModule(self, method):
+#         # methodModule = Module.new(method.ownerClass.ownerModule.strongName() + ":" + method.ownerClass.name + ":" + method.name)
+#         # TODO How about module name?
+#         methodModule = Module.from_assembly(method.code)
+#         self.llvm.add_module(methodModule)
+#
+#     def registerCodeModule(self, code):
+#         codeModule = Module.from_assembly(code)
+#         self.llvm.add_module(codeModule)
+#
+class PythonExecutionService(IExecutionService):
     def __init__(self):
-        emptyModule = Module.new('Dummy')
-        self.llvm = ExecutionEngine.new(emptyModule)
+        self.name = "PythonExecutionService"
 
     def runMethod(self, method, **args):
-        retval = self.llvm.run_function(method, args)
+        retval = None
+        if hasattr(method, 'compiledCode'):
+            retval = eval(method.compiledCode, args)
+        elif hasattr(method, 'code'):
+            exec(method.code, args)
         if retval is not None:
             print "Returned: %s" % str(retval.as_int())
 
     def registerMethodModule(self, method):
-        # methodModule = Module.new(method.ownerClass.ownerModule.strongName() + ":" + method.ownerClass.name + ":" + method.name)
-        # TODO How about module name?
-        methodModule = Module.from_assembly(method.code)
-        self.llvm.add_module(methodModule)
+        pass
+        # if method.code is not None:
+        #     method.compiledCode = compile(method.code, method.ownerClass.ownerModule.name + ":" + method.ownerClass.name + ":" + method.name + '.py', 'eval')
 
     def registerCodeModule(self, code):
-        codeModule = Module.from_assembly(code)
-        self.llvm.add_module(codeModule)
-
+        pass
 
 class Runtime(IRuntime):
 
     @inject(ioc=Injector)
     def __init__(self, ioc):
         self.modules = list()
-        self.moduleByUrl = dict()
+        self.moduleByKey = dict()
         self.ioc = ioc
 
-    def getRunningModuleWithURL(self, moduleURL):
-        return self.moduleByUrl.get(moduleURL)
+    def getRunningModule(self, moduleRequirement):
+        return self.moduleByKey.get(ModuleIdentifier(moduleRequirement))
 
     def registerModule(self, module):
         if module.state != ModuleState.loaded:
@@ -80,7 +110,7 @@ class Runtime(IRuntime):
         if not module in self.modules:
             self.modules.append(module)
             if module.origin is not None:
-                self.moduleByUrl[module.origin] = module
+                self.moduleByKey[module.getIdentifier()] = module
 
     def activateModule(self, module):
         for subModule in Runtime.allModules(module):
