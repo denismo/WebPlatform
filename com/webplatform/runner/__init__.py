@@ -34,14 +34,17 @@ class Bootstrapper(object):
             requirement = dependency.moduleRequirement()
             if runtime.isModuleLoaded(requirement):
                 continue
-            module = cache.getCachedModuleFromRequirement(requirement)
-            if module is None:
-                if dependency.originURL is not None:
+            moduleBinary = cache.getCachedModule(requirement)
+            if moduleBinary is None:
+                if hasattr(dependency, 'originURL') and dependency.originURL is not None:
                     try:
-                        module = self.fetchModule(dependency.originURL)      # throws
+                        moduleBinary = self.fetchModule(dependency.originURL)      # throws
                     except:
-                        module = self.fetchModuleFromCentral(requirement)    # throws
+                        moduleBinary = self.fetchModule(requirement)    # throws
+                else:
+                    moduleBinary = self.fetchModule(requirement)
 
+            module = Module.newFromBinary(moduleBinary, self.ioc)
             runtime.registerModule(module)
             dependency.module = module
 

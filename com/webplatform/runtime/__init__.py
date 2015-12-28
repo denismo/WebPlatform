@@ -1,10 +1,17 @@
+from abc import abstractmethod
+from abc import ABCMeta
 
 
 class IExecutionService(object):
     pass
 
 class IRuntime(object):
-    pass
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def isModuleLoaded(self, moduleRequirement):
+        pass
+
 
 class IModuleCache(object):
     def cacheModule(self, module):

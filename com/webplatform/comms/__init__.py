@@ -16,8 +16,9 @@ class Resource(object):
 
 class ModuleDependencyResource(object):
     def __init__(self, dep):
-        for prop in ["name", "originURL", "requiredVersion", "certificateHash", "downloadTime"]:
-            setattr(self, prop, dep[prop])
+        for prop in ["name", "publisher", "originURL", "requiredVersion", "certificateHash", "downloadTime"]:
+            if prop in dep:
+                setattr(self, prop, dep[prop])
 
 
 class ModuleResource(Resource):
@@ -53,7 +54,7 @@ class ModuleResource(Resource):
             # TODO Implement verification
             self.verifyModule()
         else:
-            raise RuntimeException("Unsupported module binary type " + type(moduleBinary))
+            raise RuntimeException("Unsupported module binary type " + str(type(moduleBinary)))
 
     def verifyModule(self):
         # TODO Implement module verification
@@ -77,28 +78,34 @@ class NamedTypedValue(TypedValue):
 class MethodParameter(NamedTypedValue):
     @inject(ioc=Injector)
     def __init__(self, parameterSpec, ioc):
-        super(NamedTypedValue, self).__init__(parameterSpec["name"], parameterSpec["type"], ioc)
+        super(MethodParameter, self).__init__(parameterSpec["name"], parameterSpec["type"], ioc)
+        self.ioc = ioc
         self.kind = parameterSpec["kind"]   # ParameterKind - in, out, ref
 
 
 class MethodResource(object):
     # name, code
-    def __init__(self, methodBinary):
+    @inject(ioc=Injector)
+    def __init__(self, methodBinary, ioc):
+        self.ioc = ioc
         self.name = methodBinary["name"]
         if "parameters" in methodBinary:
-            self.parameters = methodBinary["parameters"].map(lambda param: MethodParameter(param))
+            self.parameters = methodBinary["parameters"].select(lambda param: MethodParameter(param, self.ioc)).to_list()
         if "returnType" in methodBinary:
             self.returnType = TypedValue(methodBinary["returnType"])
         if "code" in methodBinary:
             self.content = methodBinary["code"]
         self.static = methodBinary["static"]
-
+        if "references" in methodBinary:
+            self.references = methodBinary["references"]
 
 class CodeResource(Resource):
     type = "application/x-web-code"
 
-    def __init__(self, codeBinary):
+    @inject(ioc=Injector)
+    def __init__(self, codeBinary, ioc):
         super(CodeResource, self).__init__()
+        self.ioc = ioc
         self.content = codeBinary["code"]  # LLVM Binary
         self.type = CodeResource.type
 
@@ -106,11 +113,13 @@ class CodeResource(Resource):
 class ClassResource(Resource):
     type = "application/x-web-class"
 
-    def __init__(self, classBinary):
+    @inject(ioc=Injector)
+    def __init__(self, classBinary, ioc):
         super(ClassResource, self).__init__()
+        self.ioc = ioc
         self.type = ClassResource.type
         self.name = classBinary["name"]
-        self.methods = map(lambda method: MethodResource(method), classBinary["methods"])
+        self.methods = map(lambda method: MethodResource(method, self.ioc), classBinary["methods"])
 
 
 class Visibility(object):
@@ -126,10 +135,15 @@ class IResourceFactory(object):
 
 class ResourceFactory(IResourceFactory):
     resourceMap = {ClassResource.type: ClassResource, CodeResource.type: CodeResource}
+
+    @inject(ioc=Injector)
+    def __init__(self, ioc):
+        self.ioc = ioc
+
     def decode(self, binaryResource):
         resource_type = binaryResource["type"]
         if resource_type in ResourceFactory.resourceMap:
-            return ResourceFactory.resourceMap[resource_type](binaryResource)
+            return ResourceFactory.resourceMap[resource_type](binaryResource, self.ioc)
         return None
 
 

@@ -5,6 +5,7 @@ from injector import Injector, inject
 from webplatform.modules import ModuleState, ModuleIdentifier, Module
 from webplatform.runtime import IExecutionService, IRuntime, IModuleIO, IModuleCache, RuntimeException
 from webplatform.runtime.impl.aspects import MainMethodAspect
+import dontasq
 
 __author__ = 'Denis Mikhalkin'
 
@@ -69,22 +70,40 @@ class AspectManager(object):
 #         self.llvm.add_module(codeModule)
 #
 class PythonExecutionService(IExecutionService):
+
+
     def __init__(self):
         self.name = "PythonExecutionService"
+        self.methods = dict()
 
     def runMethod(self, method, **args):
         retval = None
-        if hasattr(method, 'compiledCode'):
-            retval = eval(method.compiledCode, args)
-        elif hasattr(method, 'code'):
-            exec(method.code, args)
+        if hasattr(method, 'code'):
+            if hasattr(method, 'references'):
+                for reference in method.references:
+                    args[reference['runtime']['stub']] = reference['referenced'].compiledCode
+            exec method.code in args
         if retval is not None:
             print "Returned: %s" % str(retval.as_int())
 
     def registerMethodModule(self, method):
-        pass
-        # if method.code is not None:
-        #     method.compiledCode = compile(method.code, method.ownerClass.ownerModule.name + ":" + method.ownerClass.name + ":" + method.name + '.py', 'eval')
+        code = method.code
+        def wrapper(argumentList):
+            def _runner(*args):
+                exec code in dict(zip(argumentList, args))
+
+            return _runner
+
+        """:type method ModuleMethod"""
+        if hasattr(method, 'references'):
+            for reference in method.references:
+                # TODO This should really go via compiled externs of modules - so runtime needs resolve that first to avoid leakage of concepts
+                fullName = reference['module']['name'] + '.' + reference['className'] + '.' + reference['methodName']
+                if not fullName in self.methods:
+                    raise RuntimeException('Unable to find function for reference ' + str(reference))
+                reference['referenced'] = self.methods[fullName]
+        self.methods[method.ownerClass.ownerModule.name + '.' + method.ownerClass.name + '.' + method.name] = method
+        method.compiledCode = wrapper(method.parameters.select(lambda arg: arg.name).to_list())
 
     def registerCodeModule(self, code):
         pass
@@ -99,6 +118,9 @@ class Runtime(IRuntime):
 
     def getRunningModule(self, moduleRequirement):
         return self.moduleByKey.get(ModuleIdentifier(moduleRequirement))
+
+    def isModuleLoaded(self, moduleRequirement):
+        return self.moduleByKey.get(ModuleIdentifier(moduleRequirement)) is not None
 
     def registerModule(self, module):
         if module.state != ModuleState.loaded:

@@ -1,6 +1,6 @@
 from injector import inject, Injector
 from distlib.version import NormalizedVersion, NormalizedMatcher
-from webplatform.runtime import IExecutionService, IRuntime
+from webplatform.runtime import IExecutionService, IRuntime, RuntimeException
 from webplatform.comms import CodeResource, ClassResource, ModuleResource
 import dontasq
 
@@ -41,10 +41,18 @@ class ModuleMethod(object):
         self.ioc = ioc
 
     def init(self, ownerClass, methodRes):
+        """:type ownerClass ModuleClass"""
         self.ownerClass = ownerClass
         self.name = methodRes.name
         self.code = methodRes.content if hasattr(methodRes, 'content') else None
         self.static = methodRes.static
+        if hasattr(methodRes, 'references'):
+            self.references = methodRes.references
+
+        self.parameters = list()
+        if hasattr(methodRes, 'parameters'):
+            self.parameters = methodRes.parameters
+
 
     def prepare(self):
         execService = self.ioc.get(IExecutionService)
@@ -135,14 +143,16 @@ class ModuleRequirement(object):
             return self.name == moduleOrKey.name and self.version.matches(moduleOrKey.version) and \
                    self.certificateHash == moduleOrKey.certificateHash and self.publisher == moduleOrKey.publisher
         else:
-            raise RuntimeError("Unexpected value for matching module requirement: " + moduleOrKey)
+            raise RuntimeException("Unexpected value for matching module requirement: " + moduleOrKey)
+
+    def __repr__(self):
+        return "ModuleRequirement(name=%(name)s, version=%(version)s, publisher=%(publisher)s, certificateHash=%(certificateHash)s)" % self.__dict__
 
 class ModuleDependency(object):
     def __init__(self, dep):
         for prop in ["name", "originURL", "requiredVersion", "certificateHash", "downloadTime", "publisher"]:
-            setattr(self, prop, getattr(dep, prop))
-
-        self.requiredVersion = VersionRequirement(self.name, self.requiredVersion)
+            if hasattr(dep, prop):
+                setattr(self, prop, getattr(dep, prop))
 
         # self.requiredVersion = None  # instance of VersionRequirement
         # self.name = ""
@@ -165,6 +175,9 @@ class VersionRequirement(object):
             return self.requirement.match(NormalizedVersion(module))
         elif type(module) == Module:
             return self.requirement.match(NormalizedVersion(module.version))
+
+    def __repr__(self):
+        return "VersionRequirement(%s)" % self.requirement
 
 ################ ENUMS #################
 
